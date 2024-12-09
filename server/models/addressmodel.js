@@ -8,7 +8,7 @@ const addressSchema = new mongoose.Schema({
     country:{type:String, default:""},
     mobile:{type:Number, default:""},
     status:{type:Boolean,default:true}
-  
+   
 },{
     timestamps : true
 })
