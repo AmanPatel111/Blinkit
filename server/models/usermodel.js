@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema({
     ],
     forgot_password_otp:{type:String,default:null},
     forgot_password_expiry:{type:Date,default:null},
-    role:{type:String,enum:["ADMIN", "USER"],default:user},
+    role:{type:String,enum:["ADMIN", "USER"],default:'USER'},
 
 
    
