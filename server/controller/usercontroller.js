@@ -1,6 +1,7 @@
 import { SendEmail } from "../Config/sendEmail.js";
 import UserModel from "../models/usermodel.js";
 import bcryptjs from "bcryptjs";
+import jwt from "jsonwebtoken"
 import { VerifyEmailTemplate } from "../Utils/VerifyEmailTemplate.js";
 import { generateAccessToken } from "../Utils/generateAccessToken.js";
 import generatedRefreshToken from "../Utils/generatedrefreshToken.js";
@@ -174,7 +175,7 @@ export const logoutController = async (req, res) => {
     res.clearCookie("accessToken", cookiesOption);
     res.clearCookie("refreshToken", cookiesOption);
 
-    const removetoken = await UserModel.updateOne(userId, {
+    const removetoken = await UserModel.findByIdAndUpdate(userId, {
       refresh_token: "",
     });
 
@@ -277,7 +278,8 @@ export const forgotPasswordController = async (req, res) => {
     }
 
     const otp = Math.floor(Math.random() * 900000) + 100000;
-    const expiry = new Date() + 60 * 60 * 1000; // 1hour
+    const expiry = new Date(new Date().getTime() + 5 * 60 * 1000);  //validate for 5 mins 
+    
    
     const update = await UserModel.findByIdAndUpdate(
       user._id,
@@ -309,12 +311,139 @@ export const forgotPasswordController = async (req, res) => {
 // Verify Forgot Password OTP
 export const verifyForgotPasswordOtpController = async(req,res)=>{
 try {
-  const {email , OTP}
- = req.body  
+  const {email , OTP} = req.body  
+
+  if(!email || !OTP){
+    return res.status(400).json({
+      message:"Enter Email & OTP",
+      success:false,
+    })
+  }
+
+  const user = await UserModel.findOne({email})
+
+  if(!user){
+    return res.json({
+      message:"User not found , kindly register",
+      success: false
+    })
+  }
+  
+  if (OTP !== user.forgot_password_otp){
+    return res.status(400).json({
+      message:"Incorrect OTP !",
+      success: false
+    })
+  }
+
+  if (user.forgot_password_expiry < new Date()){
+    return res.json({
+      message:"OTP Expeired !",
+      success: false
+    })
+  }
+
+  
+  // return res.json({
+  //   message:"User Verified",
+  //   success:true
+  // })
+
+
 } catch (error) {
   return res.status(500).json({
     message: error.message || error,
     success:false
   })
+}
+}
+
+//Reset Password 
+export const resetPasswordController  = async(req,res)=>{
+  try {
+    const {  email, newPassword, confirmPassword}= req.body;
+
+    if(!email || !newPassword || !confirmPassword) {
+      return res.json({
+        message:"Please Provide Email & New Password & Confirm Password",
+        success: false
+      })
+    }
+
+    if (newPassword !== confirmPassword){
+      return res.json({
+        message:"New password & Confirm Password should be same",
+        success: false
+      })
+    }
+
+    const user = await UserModel.findOne({email})
+    
+    if(!user){
+      return res.json({
+        message:"User not found",
+        success: false
+      })
+    }
+
+    const salt = await bcryptjs.genSalt(10)
+    const hashPassword = await bcryptjs.hash(newPassword, salt)
+
+    user.password = hashPassword;
+    user.forgot_password_otp = null;
+    user.forgot_password_expiry = null;
+    await user.save();
+
+    return res.json({
+      message:' Password changed Successfully!',
+      success: true
+    })
+    
+  } catch (error) {
+    return res.json({
+      message: error.message || error,
+      success: false
+    })
+  }
+}
+
+// Refresh Token Controller
+export const refreshTokenController  = async(req,res)=>{
+try {
+  const refreshToken = req.cookies.refreshToken || req?.header?.authorization?.split(" ")[1];
+
+  if(!refreshToken){
+    return res.status(401).json({
+      message:"Unauthorised Access/ Refresh token not found",
+      success: false
+    })
+  }
+
+  const verifyToken = await jwt.verify(refreshToken, process.env.SECRET_KEY_REFRESH_TOKEN)
+
+  if (!verifyToken){
+    return res.status(401).json({
+      message:"Token Expired !",
+      success: false
+    })
+  }
+  const userId = verifyToken.id
+  const accessToken = await generateAccessToken(userId)
+  const cookiesOption = {
+httpOnly : true,
+secure: true,
+sameSite: "none"
+  }
+  res.cookie('accessToken',accessToken, cookiesOption)
+  return res.json({
+    message:" Access token updated ",
+    success: true,
+    data: {
+      accessToken : accessToken
+    }
+  })
+
+} catch (error) {
+  
 }
 }
